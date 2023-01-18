@@ -1,0 +1,173 @@
+#####Trimming, deduplicating, and quality filtering fastq files
+
+#download zip file of Misha’s scripts (https://github.com/z0on/2bRAD_denovo) to desktop
+
+#upload the following scripts to 2bRAD folder on SCC
+2bRAD_trim_launch_dedup.pl
+trim2bRAD_2barcodes_dedup.pl
+
+#get permission for scripts
+chmod 777 scriptname
+
+#use the following script and command to create a file called trims
+#this creates a file called "trims" that contains a list of the fastq files and launches trim2bRAD_2barcodes_dedup.pl (script) for each file
+2bRAD_trim_launch_dedup.pl fastq adaptor="AGAT?" sampleID=2 > trims
+           # 2bRAD_trim_launch_dedup.pl = name of script
+           # fastq adapter =”AGAT?” = specify universal adapter to look for: in this case, AGATC, which we call "AGAT?" in deduplicating step
+           # sampleID=2 = integar in name to call the output file 
+
+
+#open the “trims” file
+geany trims
+
+#add the following to make into a qsub, "trims.qsub" for job submission
+#!/bin/bash -l
+#$ -V # inherit the submission environment
+#$ -cwd # start job in submission directory
+#$ -N trims # job name, anything you want
+#$ -l h_rt=24:00:00
+#$ -M kscavo@bu.edu #your email notification
+#$ -m be
+
+#submit qsub
+qsub trims.qsub
+
+#What does trim2bRAD_2barcodes_dedup.pl do?
+            #Filters 2bRAD fastq reads to leave only those with a 100% matching restriction site, degenerate 5'-leader, secondary 3'-barcode, and adaptor on the far 3'end, trims away everything except the IIb-fragment itself
+            #Deduplicates: removes all but one read sharing the same 64-fold degenerate leader, the first 34 bases of the insert sequence, and secondary barcode (this results in 128-fold dynamic range: 64-fold degeneracy x 2 strand orientations);
+            #Splits reads into separate files according to secondary barcode.
+            #Writes trimmed fastq files named according to the secondary barcodes detected. 
+            #Creates an output file that has de-duplication counts information (trims.o*)
+
+#to see counts info:
+nano trims.o*
+
+#check to see if you have the right amount of tr0 files: 
+ls -lh *tr0 | wc -l
+
+#We will do some quality filtering using cutadapt (https://github.com/z0on/2bRAD_denovo/blob/master/2bRAD_README.txt)
+
+#removing reads with qualities at ends less than Q15 (Misha's recommendation for de novo analysis)
+>trimse
+for file in *.tr0; do echo "cutadapt -q 15,15 -m 25 -o ${file/.tr0/}.trim $file > ${file}_trimlog.txt" >> trimse; done
+         #this creates a file called trimse-open up the file to see all the commands to use cutadapt for each file.
+        
+         
+#open up "trimse" file
+geany trimse
+
+#add this text to tope of "trimse" file and save as a qsub "trimse.qsub"
+#$ -V # inherit the submission environment
+#$ -cwd # start job in submission directory
+#$ -N trimse # job name, anything you want
+#$ -l h_rt=24:00:00
+#$ -M kscavo@bu.edu
+#$ -m be
+
+module load cutadapt
+
+#submit trimming qsub job
+qsub trimse.qsub
+
+#once the job is finished, merge together all log files created from trimming so that they are easier to look at
+cat *.txt > Merged_trimlog_files.txt 
+
+#all trimmed files have ending, .trim
+
+#check to see of you have the right amount of trim files (should match the number of .tr0 files)
+ls -l *.trim | wc -l
+
+
+# Mapping 2bRAD 2019 PDIV samples to the new PacBio PDIV reference (pdiv_genome_curated_host_draft.fa) 
+	# and conducting population structure analyses with ANGSD
+
+# pdiv_genome_curated_host_draft.fa = Porites divaricata reference genome
+
+# Build and index your reference 
+# define your ref genome variables in your current directory
+export GENOME_FASTA=pdiv_genome_curated_host_draft.fa
+
+
+# create a qsub to build your reference
+geany buildref_pdiv.qsub
+
+# add this to buildref_pdiv qsub
+#!/bin/bash -l
+#$ -V # inherit the submission environment
+#$ -cwd #start job in submission directory
+#$ -N buildref_pdiv # job name, anything you want
+#$ -l h_rt=24:00:00
+#$ -M kscavo@bu.edu
+#$ -m be
+
+module load bowtie2
+
+cd /projectnb/cnidaria/kscavo/2bRAD
+
+bowtie2-build $GENOME_FASTA $GENOME_FASTA
+
+# submit job
+qsub buildref_pdiv.qsub
+
+# once it's done, index your reference (quick one - didn't do a job)
+module load samtools
+samtools faidx $GENOME_FASTA
+
+# mapping reads to reference 
+
+# map with --local option, enables clipping of mismatching ends (guards against deletions near ends of RAD tags)
+
+GENOME_FASTA=pdiv_genome_curated_host_draft.fa
+2bRAD_bowtie2_launch.pl '\.trim$' $GENOME_FASTA > maps_pdivgenome
+
+# open maps file
+geany maps_pdivgenome
+
+# added this text to the top of 'maps' file, and saved as maps.qsub
+#!/bin/bash -l
+#$ -V # inherit the submission environment
+#$ -cwd # start job in submission directory
+#$ -N maps_pdivgenome # job name
+#$ -l h_rt=24:00:00
+#$ -M kscavo@bu.edu #your email notification
+#$ -m be
+
+#also add module load bowtie2 to qsub
+
+#submit maps.qsub as a job
+qsub maps_pdivgenome.qsub
+
+#makes .sam files for all your samples
+
+ls *.sam > sams   #makes a text file with all .sam files so that you can count them in next command
+cat sams | wc -l # number should match number of trim files
+
+# next stage is compressing, sorting and indexing the SAM files, so they become BAM files:
+for file in *.sam; do
+echo "samtools sort -O bam -o ${file/.sam/}.bam $file && samtools index ${file/.sam/}.bam">>s2b;
+done
+    #This makes a file called "s2b" which has makes a list of commands to execute
+    
+# open s2b file
+geany s2b
+
+# added this text to the top of 's2b' file, and saved as s2b.qsub
+#!/bin/bash -l
+#$ -V # inherit the submission environment
+#$ -cwd # start job in submission directory
+#$ -N s2b_pdivgen # job name
+#$ -l h_rt=24:00:00
+#$ -M kscavo@bu.edu #your email notification
+#$ -m be
+
+# also add module load samtools to qsub
+
+# submit s2b.qsub as a job
+qsub s2b_pdivgen.qsub
+
+# makes .bam files for all your samples
+
+# check to see if you have .bam files for all samples
+ls *bam | wc -l  # should be the same number as number of trim files
+
+# BAM files are the input into various genotype calling / popgen programs, this is the main interim result of the analysis. Archive them.
