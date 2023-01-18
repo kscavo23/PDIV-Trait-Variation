@@ -78,6 +78,35 @@ cat *.txt > Merged_trimlog_files.txt
 ls -l *.trim | wc -l
 
 
+# Something weird is going on with the deduplication using the above method....tried this
+# re-downloaded thhe most up to date scripts from the zoon github (2bRAD_trim_launch_dedup.pl, trim2bRAD_2barcodes_dedup.pl)
+
+2bRAD_trim_launch_dedup.pl fastq > trims2
+
+
+#open the “trims2” file
+geany trims2
+
+#add the following to make into a qsub, "trims.qsub" for job submission
+#!/bin/bash -l
+#$ -V # inherit the submission environment
+#$ -cwd # start job in submission directory
+#$ -N trims2 # job name, anything you want
+#$ -l h_rt=24:00:00
+#$ -M kscavo@bu.edu #your email notification
+#$ -m be
+
+#submit qsub
+qsub trims2.qsub
+
+
+
+
+
+
+
+
+
 # Mapping 2bRAD 2019 PDIV samples to the new PacBio PDIV reference (pdiv_genome_curated_host_draft.fa) 
 	# and conducting population structure analyses with ANGSD
 
