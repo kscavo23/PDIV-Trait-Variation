@@ -137,7 +137,7 @@ geany s2b
 # also add module load samtools to qsub
 
 # submit s2b.qsub as a job
-qsub s2b_pdivgen.qsub
+qsub s2b.qsub
 
 # makes .bam files for all your samples
 
