@@ -1,1 +1,200 @@
+# Analysis of environmental variation (temperature and light) across transplant sites
+
+library("ggplot2")
+library("Rmisc")
+library("lubridate")
+library("tidyverse")
+library("doBy") 
+library("lme4")
+library("ggpubr")
+library("vegan")
+library("factoextra")
+library("car")
+library("jtools")
+library("lmerTest")
+library("stargazer")
+library("cowplot")
+
+#started with hogo logger excel sheets, 
+#cleaned the header so R would be happy, 
+#added Logger & Habitat column, 
+#lastly duplicated the date/time column so that I could 
+#have one each for 'year', 'month', 'day', and 'time'. 
+#Designated these by changing the 'custom format' for the cells.
+
+#### read in data ####
+M2 <- read.csv("RData_Channel_M2_LoggerC2022.csv",header=TRUE)
+M1 <- read.csv("RData_Island_M1_LoggerC2022.csv",header=TRUE)
+R_1 <- read.csv("RData_Reef_R_1_LoggerC2022.csv",header=TRUE)
+R_2 <- read.csv("RData_Reef_R_2_LoggerC2022.csv",header=TRUE)
+
+#merging the data 
+all <- rbind(M2,M1,R_1,R_2)
+head(all)
+tail(all)
+summary(all)
+
+all$Date = as.character(all$Date)
+all$Date = paste(all$Year,"/",all$Month,"/",all$Day)
+all$Date = gsub(' ', '', all$Date)
+all$Date = as.Date(all$Date,format="%Y/%m/%d")
+all$Date = as.factor(all$Date)
+
+# TEMPERATURE
+
+# mean temperature
+
+# mixed - effect models with lmer
+m1 <- lmer(Temp ~ Site + (1|Date), REML=FALSE, data = all)
+summary(m1) # summary of model
+summ(m1)  # neater summary from "jtools" package
+confint(m1, method="Wald")
+
+# reorder transplant site (which one is the intercept) to make comparisons
+all2= all
+all2$Site = factor(all2$Site,levels=c("M2", "M1","R_1", "R_2"))
+all3= all
+all3$Site = factor(all3$Site,levels=c("R_1", "M1","M2", "R_2"))
+str(all)
+
+m1b <- lmer(Temp ~ Site + (1|Date), data = all2)
+summary(m1b) 
+
+m1c <- lmer(Temp ~ Site + (1|Date), data = all3)
+summary(m1c)
+ 
+
+# temperature range
+
+library("doBy") 
+#defining functions to do: mean, variance, and range (min & max)
+fun <- function(x){
+  c(m=mean(x), v=var(x), r=range(x))
+}
+
+range2 <- summaryBy(Temp ~ Date*Site, data=all,
+                    FUN=fun)
+
+range2$trange <- range2$Temp.r2 - range2$Temp.r1
+
+# mixed - effect models
+m2 <- lmer(trange ~ Site + (1|Date), data = range2)
+summary(m2)
+summ(m2)
+confint(m2, method="Wald")
+
+# reorder transplant site (which one is the intercept) to make comparisons
+range2_2= range2
+range2_2$Site = factor(range2_2$Site,levels=c("M2", "M1","R_1", "R_2"))
+
+range2_3= range2_2
+range2_3$Site = factor(range2_3$Site,levels=c("R_1", "M1","M2", "R_2"))
+
+m2b <- lmer(trange ~ Site + (1|Date), data = range2_2)
+summary(m2b) 
+
+m2c <- lmer(trange ~ Site + (1|Date), data = range2_3)
+summary(m2c) 
+
+# Plotting temperature data - mean and range
+
+#Boxplot of temp mean for each day by site logger
+
+ggplot(all,aes(x=Site,y=Temp,color=Site))+
+  geom_boxplot(outlier.shape = NA, width=0.5, lwd=0.8) +
+  geom_point(size = 0.6, alpha = 0.2, position = position_jitterdodge(jitter.width = 0.6)) +
+  coord_cartesian(ylim = c(23, 34)) +
+  scale_color_manual(values = c("limegreen", "darkgreen", "dodgerblue3", "deepskyblue2")) +
+  theme_bw()
+
+#Boxplot of temp range for each site logger
+
+ggplot(range2,aes(x=Site,y=trange,color=Site)) +
+  geom_boxplot(outlier.shape = NA, width=0.5, lwd=.6) +
+  geom_point(size = 0.6, position = position_jitterdodge()) +
+  coord_cartesian(ylim = c(0, 5)) +
+  scale_color_manual(values = c("limegreen", "darkgreen", "dodgerblue3", "deepskyblue2")) +
+  theme_bw()
+
+# LIGHT
+
+# mean light
+
+#filtering for just one week of data
+light.1wk <- all %>%
+  filter(as.Date(all$Date) <= as.Date("2022-2-17"))
+
+#removing 0s because they mess up the rest of the analyses & they are at night
+light.1wk$Light[light.1wk$Light==0] <- NA
+light.day <- light.1wk[!is.na(light.1wk$Light),]
+
+light.1wk$Date = as.character(light.1wk$Date)
+
+# the light.day dataframe contains all light values for 8 days Feb 11-18, and does
+# not include light values = 0 (night values)
+
+# mixed - effect models
+m3 <- lmer(log(Light) ~ Site + (1|Date), data = light.1wk)
+summary(m3)
+confint(m3, method="Wald")
+
+# reorder transplant site (which one is the intercept) to make comparisons
+light.1wk2= light.1wk
+light.1wk2$Site = factor(light.1wk2$Site,levels=c("M1", "R_2","R_1", "M2"))
+
+light.1wk3= light.1wk
+light.1wk3$Site = factor(light.1wk3$Site,levels=c("R_1", "M1","M2", "R_2"))
+
+m3b <- lmer(log(Light) ~ Site + (1|Date), data = light.1wk2)
+summary(m3b)
+
+m3c <- lmer(log(Light) ~ Site + (1|Date), data = light.1wk3)
+summary(m3c)
+
+
+# light range
+
+range.light <- summaryBy(Light ~ Date*Site, data=light.day,
+                         FUN=fun)
+
+range.light$lrange <- range.light$Light.r2 - range.light$Light.r1
+
+range.light$Date = as.character(range.light$Date)
+
+# mixed - effect models
+
+m4 <- lmer(log(lrange) ~ Site + (1|Date), data = range.light)
+summary(m4)
+confint(m4, method="Wald")
+
+# reorder transplant site (which one is the intercept) to make comparisons
+range.light2= range.light
+range.light2$Site = factor(range.light2$Site,levels=c("M2", "R_2","R_1", "M1"))
+
+range.light3= range.light
+range.light3$Site = factor(range.light3$Site,levels=c("R_1", "M1","M2", "R_2"))
+
+m4b <- lmer(log(lrange) ~ Site + (1|Date), data = range.light2)
+summary(m4b)
+
+m4c <- lmer(log(lrange) ~ Site + (1|Date), data = range.light3)
+summary(m4c)
+  
+# Plotting light data - mean and range
+
+# plot mean light for each site logger
+ggplot(range.light,aes(x=Site,y=log(Light.m),color=Site))+
+  geom_boxplot(outlier.shape = NA, width=0.4, lwd=.6) +
+  geom_point(size = 0.8, position = position_jitterdodge()) +
+  coord_cartesian(ylim = c(3, 9)) +
+  scale_color_manual(values = c("limegreen", "darkgreen", "dodgerblue3", "deepskyblue2")) +
+  theme_bw()
+
+# plot light range for each site logger
+ggplot(range.light,aes(x=Site,y=log(lrange),color=Site))+
+  geom_boxplot(outlier.shape = NA, width=0.4, lwd=.6) +
+  geom_point(size = 0.6, position = position_jitterdodge()) +
+  coord_cartesian(ylim = c(3, 9)) +
+  scale_color_manual(values = c("limegreen", "darkgreen", "dodgerblue3", "deepskyblue2")) +
+  theme_bw()
 
