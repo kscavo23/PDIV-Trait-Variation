@@ -15,13 +15,6 @@ library("lmerTest")
 library("stargazer")
 library("cowplot")
 
-#started with hogo logger excel sheets, 
-#cleaned the header so R would be happy, 
-#added Logger & Habitat column, 
-#lastly duplicated the date/time column so that I could 
-#have one each for 'year', 'month', 'day', and 'time'. 
-#Designated these by changing the 'custom format' for the cells.
-
 #### read in data ####
 M2 <- read.csv("RData_Channel_M2_LoggerC2022.csv",header=TRUE)
 M1 <- read.csv("RData_Island_M1_LoggerC2022.csv",header=TRUE)
