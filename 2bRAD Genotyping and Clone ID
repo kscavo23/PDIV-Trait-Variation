@@ -147,21 +147,7 @@ ls *bam | wc -l  # should be the same number as number of trim files
 # BAM files are the input into various genotype calling / popgen programs, this is the main interim result of the analysis. Archive them.
 
 # ---- Using ANGSD for identity by state ---- #
-
-# ---- Trial : Keep reef individuals in the analysis, as run in Manzello et al 2019
-Trial 1 output name = myresult_pdiv_field_mang_reef
-
-FILTERS="-minMapQ 20 -dosnpstat 1 -doHWE 1 -minInd 162 -minMaf 0.05"   
-# 162 = 85% of samples (0.85 x 190
-
-TODO="-doMajorMinor 1 -doMaf 1 -doCounts 1 -makeMatrix 1 -doIBS 1 -doCov 1 -doGeno 8 -dobcf 1 -doPost 1 -doGlf 2"
-
-angsd -b bams_field_mang_reef -GL 1 $FILTERS $TODO -P 1 -out myresult_pdiv_field_mang_reef
-
-# number of snps= 6608 
-
-# ---- Trial 2: Run with only mangrove individuals, as run in Manzello et al 2019, no reef samples
-trial 2 output name = myresult_pdiv_field_mang
+output name = myresult_pdiv_field_mang
 
 FILTERS="-minMapQ 20 -dosnpstat 1 -doHWE 1 -minInd 157 -minMaf 0.05"
 # 157 = 85% of samples (0.85 x 185)
@@ -171,38 +157,5 @@ TODO="-doMajorMinor 1 -doMaf 1 -doCounts 1 -makeMatrix 1 -doIBS 1 -doCov 1 -doGe
 angsd -b bams_field_mang -GL 1 $FILTERS $TODO -P 1 -out myresult_pdiv_field_mang
 
 # number of snps= 6686
-
-
-# Relatedness Trial 1 (must run ANGSD with option '-doGlf 3' to make this work) - no reef samples, with unique genotypes (not clones)
-
-module load angsd
-module load ngsrelate
-
-FILTERS="-minMapQ 20 -dosnpstat 1 -doHWE 1 -minInd 26 -minMaf 0.05"
-
-TODO="-doMajorMinor 1 -doMaf 1 -doCounts 1 -makeMatrix 1 -doIBS 1 -doCov 1 -doGeno 8 -dobcf 1 -doPost 1 -doGlf 3"
-
-angsd -b bams_relate_model -GL 1 $FILTERS $TODO -P 1 -out myresult_relate_model
-
-# Number of sites retained after filtering: 11227 
-
-zcat myresult_relate_model.mafs.gz | cut -f5 |sed 1d >freq
-ngsRelate -f freq -g myresult_relate_model.glf.gz -n 33 -z bams_relate_model -O relatedness_model
-
-# Relatedness Trial 2 (must run ANGSD with option '-doGlf 3' to make this work) - no reef samples, without unique genotypes
-
-module load angsd
-module load ngsrelate
-
-FILTERS="-minMapQ 20 -dosnpstat 1 -doHWE 1 -minInd 26 -minMaf 0.05"
-
-TODO="-doMajorMinor 1 -doMaf 1 -doCounts 1 -makeMatrix 1 -doIBS 1 -doCov 1 -doGeno 8 -dobcf 1 -doPost 1 -doGlf 3"
-
-angsd -b bams_relate_model_nounq -GL 1 $FILTERS $TODO -P 1 -out myresult_relate_model_nounq
-
-Number of sites retained after filtering: 10811 
-
-zcat myresult_relate_model_nounq.mafs.gz | cut -f5 |sed 1d >freq
-ngsRelate -f freq -g myresult_relate_model_nounq.glf.gz -n 32 -z bams_relate_model_nounq -O relatedness_model_nounq
 
 
