@@ -9,7 +9,6 @@ trim2bRAD_2barcodes_dedup.pl
 #get permission for scripts
 chmod 777 scriptname
 
-
 2bRAD_trim_launch_dedup.pl fastq > trims2
 
 #open the “trims2” file
@@ -43,7 +42,6 @@ cat *.txt > Merged_trimlog_files.txt
 ls -l *.trim | wc -l
 
 # Mapping new 2bRAD field sample files and the 2bRAD 2019 PDIV samples to the new PacBio PDIV reference (pdiv_genome_curated_host_draft.fa) 
-
 
 # pdiv_genome_curated_host_draft.fa = Porites divaricata reference genome
 
@@ -157,5 +155,8 @@ TODO="-doMajorMinor 1 -doMaf 1 -doCounts 1 -makeMatrix 1 -doIBS 1 -doCov 1 -doGe
 angsd -b bams_field_mang -GL 1 $FILTERS $TODO -P 1 -out myresult_pdiv_field_mang
 
 # number of snps= 6686
+
+# import resulting IBS matrix (.ibsmat) into R and use the detect_clones.R script from https://github.com/z0on/2bRAD_denovo to identify clones based on hierarchical clustering
+
 
 
