@@ -8,6 +8,3 @@ Scripts and code for analyzing phenotypic variation among Porites divaricata clo
 
 Environmental site variation
 - R code for analyzing temperature and light data from the three transplant sites using likelihood based mixed effect models in lme4
-
-Trait mixed effect models
-- R code for identifying the percentage of variation explained by different study variables (variance components) using likelihood based and Bayesian mixed effect models in lme4 and MCMCglmm
