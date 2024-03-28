@@ -1,0 +1,353 @@
+### R Script by Mikhail Matz
+
+rm(list=ls())
+library(MASS)
+library(randomForest)
+library(caret)
+options(java.parameters = "-Xmx4g")
+library(extraTrees)
+library(gbm)
+setwd("~/Dropbox/karina_scavo_modeling_sep2023")
+
+gro0=read.csv("2022_growth_nouniques_age_NEW.csv")
+chl=read.csv("2022_chl_nouniques_age_NEW.csv")
+gro=merge(gro0,chl,by="sample")
+# computing relative change in bw and len
+bwcc=gro$bw_chg/gro$bw_in
+lencc=gro$len_chg/gro$len_in
+plot(bw_chg~len_chg,gro)
+plot(bw_chg~bw_in,gro,log="xy")
+plot(len_chg~len_in,gro)
+Y=data.frame(cbind(lencc,bwcc,R=gro$R_fin))
+pairs(Y)
+
+wl=lm(lencc~bwcc)
+summary(wl)
+# Adjusted R-squared:  0.5838
+
+summary(lm(lencc~R,Y))
+# residuals
+# bwr=residuals(lm(bw_chg~bw_in,gro))
+# lenr=residuals(lm(len_chg~len_in,gro))
+# plot(bwr~lenr)
+
+# how correlated are our fitness proxies
+pdf("pairs_Y.pdf",height=5, width=5)
+pairs(Y)
+dev.off()
+
+# assembling clean table of predictors
+X=gro[,c(2:4,6,7,11,12)]
+names(X)=sub(".x","",names(X))
+names(X)[2:3]=c("genet","ramet")
+names(X)[6]="age"
+names(X)[7]="site_type"
+
+Xd=dummify(X)
+dim(Xd)
+
+# ---- start rerunning here: linear growth
+
+dats=na.omit(cbind(Xd,lencc=Y$lencc))
+dim(dats)
+
+train=sample(1:nrow(dats),0.75*nrow(dats))
+length(train)
+dats.train=dats[train,]
+dats.test=dats[-train,]
+
+# ----- random forest model
+
+cv_5 = trainControl(method = "cv", number = 5)
+rf_grid =  expand.grid(mtry = seq(5,40,by=5))
+rf_fit = train(lencc ~ ., data = dats,
+               method = "rf",
+               trControl = cv_5,
+               tuneGrid = rf_grid)
+rf_fit$bestTune
+plot(rf_fit)
+# mtry
+# 5   25
+rf_fit
+# mtry  RMSE       Rsquared   MAE      
+# 25  0.3060511  0.4574068  0.2333521
+
+# # random correlation:
+# var=na.omit(Y$lencc)
+# r2s=c()
+# for(i in 1:500) { 
+#   r2s=c(r2s,cor(var,sample(var))^2)
+# }
+# plot(hist(r2s))
+# median(r2s)
+# # 0.002
+
+# sum_up_importances
+ii = data.frame(varImp(rf_fit)$importance)
+names(ii) = "importance"
+ii$var = row.names(ii)
+is = c()
+ii0 = ii
+for (f in colnames(X)) {
+  i2 = ii0[grep(paste("^", f, "_", sep = ""), ii0$var), ]
+  if (nrow(i2) == 0) {
+    i2 = ii0[grep(paste("^", f, sep = ""), ii0$var), 
+    ]
+  }
+  is = c(is, sum(i2$importance))
+}
+ii2 = data.frame(cbind(importance = is, variable = colnames(X)))
+ii2$importance = as.numeric(ii2$importance)
+ii2$variable = factor(ii2$variable, levels = ii2$variable[order(ii2$importance)])
+ii2$rel=ii2$importance/sum(ii2$importance)
+ii2$R2=ii2$rel*0.457
+
+# fold-difference in amount of variation explained by ramet vs genet
+ii2$R2[ii2$variable=="ramet"]/ii2$R2[ii2$variable=="genet"]
+# 3.7
+levs=levels(ii2$variable)
+
+pdf(file="karina_rf_importance_lencc.pdf",height=1.8,width=2.2)
+ggplot(ii2,aes(variable,R2))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+  theme_bw()+
+  ylim(0,0.165)
+dev.off()
+
+# the following is exploration of alternative random forest methods, 
+# but those were worse (less predictive power) than the current one.
+# so, skip to line 210 (buoyant weight)
+
+# ----- extraTrees model
+et_grid =  expand.grid(mtry = seq(1,20,by=2), numRandomCuts = 1:10)
+et_fit = train(lencc ~ ., data = dats.train,
+               method = "extraTrees",
+               trControl = cv_5,
+               tuneGrid = et_grid,
+               numThreads = 8)
+et_fit$bestTune
+# mtry numRandomCuts
+#    7             2
+plot(et_fit)
+
+et_fit
+# mtry  numRandomCuts  RMSE       Rsquared   MAE  
+# 7     2             0.3270432  0.4164711  0.2585680 ---> WORSE than RF
+
+# sum_up_importances
+ii = data.frame(varImp(et_fit)$importance)
+names(ii) = "importance"
+ii$var = row.names(ii)
+is = c()
+ii0 = ii
+for (f in colnames(X)) {
+  i2 = ii0[grep(paste("^", f, "_", sep = ""), ii0$var), ]
+  if (nrow(i2) == 0) {
+    i2 = ii0[grep(paste("^", f, sep = ""), ii0$var), 
+    ]
+  }
+  is = c(is, sum(i2$importance))
+}
+ii2 = data.frame(cbind(importance = is, variable = colnames(X)))
+ii2$importance = as.numeric(ii2$importance)
+ii2$variable = factor(ii2$variable, levels = levs)
+ii2$rel=ii2$importance/sum(ii2$importance)
+ii2$R2=ii2$rel*0.414
+
+pdf(file="karina_et_importance_lencc.pdf",height=1.8,width=2.3)
+ggplot(ii2,aes(variable,R2))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+  theme_bw()+
+  ylim(0,0.178)
+dev.off()
+
+# #--------  gradient boosting
+# 
+# cv_5 = trainControl(method = "cv", number = 5)
+# gbm_fit = train(lencc ~ ., data = dats,
+#                 method = "gbm",
+#                 trControl = cv_5,
+#                 verbose = F,
+#                 tuneLength = 10)
+# 
+# # xgb_fit$bestTune
+# gbm_fit$bestTune
+# plot(gbm_fit)
+# plot(rf_fit)
+# #   interaction.depth  n.trees  RMSE       Rsquared   MAE  
+# # 5                 100      0.3404401  0.3439169  0.2658244
+# 
+# 
+# # sum_up_importances
+# ii = data.frame(varImp(gbm_fit)$importance)
+# names(ii) = "importance"
+# ii$var = row.names(ii)
+# is = c()
+# ii0 = ii
+# for (f in colnames(X)) {
+#   i2 = ii0[grep(paste("^", f, "_", sep = ""), ii0$var), ]
+#   if (nrow(i2) == 0) {
+#     i2 = ii0[grep(paste("^", f, sep = ""), ii0$var), 
+#     ]
+#   }
+#   is = c(is, sum(i2$importance))
+# }
+# ii2 = data.frame(cbind(importance = is, variable = colnames(X)))
+# ii2$importance = as.numeric(ii2$importance)
+# ii2$variable = factor(ii2$variable, levels = levs)
+# ii2$rel=ii2$importance/sum(ii2$importance)
+# ii2$R2=ii2$rel*0.34
+# 
+# pdf(file="karina_gbm_importance_lencc.pdf",height=1.8,width=2.2)
+# ggplot(ii2,aes(variable,R2))+
+#   geom_bar(stat="identity")+
+#   coord_flip()+
+#   theme_bw()
+# #  ylim(0,0.165)
+# dev.off()
+
+
+
+#-------- buoyant weight
+
+dats=na.omit(cbind(Xd,bwcc=Y$bwcc))
+dim(dats)
+
+train=sample(1:nrow(dats),0.75*nrow(dats))
+length(train)
+dats.train=dats[train,]
+dats.test=dats[-train,]
+
+cv_5 = trainControl(method = "cv", number = 5)
+rf_grid =  expand.grid(mtry = seq(1,20,by=1))
+rf_fit = train(bwcc ~ ., data = dats,
+               method = "rf",
+               trControl = cv_5,
+               tuneGrid = rf_grid)
+rf_fit$bestTune
+# mtry
+# 8
+plot(rf_fit)
+rf_fit
+# mtry  RMSE       Rsquared   MAE      
+# 8 0.4229986  0.4313839  0.3277359
+# r2pred=cor(predict(rf_fit, dats.test), dats.test$R)^2
+# r2pred
+# # 0.16
+# r2rand=cor(predict(rf_fit, dats.test), sample(dats.test$R))^2
+# r2rand
+# # 0.01
+
+# # random correlation:
+# var=na.omit(Y$bwcc)
+# r2s=c()
+# for(i in 1:500) { 
+#   r2s=c(r2s,cor(var,sample(var))^2)
+# }
+# plot(hist(r2s))
+# median(r2s)
+# # 0.0033
+
+# sum_up_importances
+ii = data.frame(varImp(rf_fit)$importance)
+names(ii) = "importance"
+ii$var = row.names(ii)
+is = c()
+ii0 = ii
+for (f in colnames(X)) {
+  i2 = ii0[grep(paste("^", f, "_", sep = ""), ii0$var), ]
+  if (nrow(i2) == 0) {
+    i2 = ii0[grep(paste("^", f, sep = ""), ii0$var), 
+    ]
+  }
+  is = c(is, sum(i2$importance))
+}
+ii2 = data.frame(cbind(importance = is, variable = colnames(X)))
+ii2$importance = as.numeric(ii2$importance)
+ii2$variable = factor(ii2$variable, levels = levs)
+ii2$rel=ii2$importance/sum(ii2$importance)
+ii2$R2=ii2$rel*0.431
+ii2$R2[ii2$variable=="ramet"]/ii2$R2[ii2$variable=="genet"]
+# 2.8
+
+pdf(file="karina_rf_importance_bwcc.pdf",height=1.8,width=2.2)
+ggplot(ii2,aes(variable,R2))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+  theme_bw()+
+  ylim(0,0.165)
+dev.off()
+
+#--------red channel
+dim(X)
+names(Xd)
+dats=na.omit(cbind(Xd,R=Y$R))
+dim(dats)
+
+train=sample(1:nrow(dats),0.75*nrow(dats))
+length(train)
+dats.train=dats[train,]
+dats.test=dats[-train,]
+
+cv_5 = trainControl(method = "cv", number = 5)
+rf_grid =  expand.grid(mtry = seq(1,20,by=1))
+rf_fit = train(R ~ ., data = dats,
+               method = "rf",
+               trControl = cv_5,
+               tuneGrid = rf_grid)
+rf_fit$bestTune
+plot(rf_fit)
+# mtry
+# 5
+rf_fit
+# mtry  RMSE       Rsquared   MAE      
+# 5    18.12848  0.2628419  14.26510
+# r2pred=cor(predict(rf_fit, dats.test), dats.test$R)^2
+# r2pred
+# # 0.16
+# r2rand=cor(predict(rf_fit, dats.test), sample(dats.test$R))^2
+# r2rand
+# # 0.01
+
+# # random correlation:
+# var=na.omit(Y$R)
+# r2s=c()
+# for(i in 1:500) { 
+#  r2s=c(r2s,cor(var,sample(var))^2)
+# }
+# plot(hist(r2s))
+# median(r2s)
+# # 0.002
+
+# sum_up_importances
+ii = data.frame(varImp(rf_fit)$importance)
+names(ii) = "importance"
+ii$var = row.names(ii)
+is = c()
+ii0 = ii
+for (f in colnames(X)) {
+  i2 = ii0[grep(paste("^", f, "_", sep = ""), ii0$var), ]
+  if (nrow(i2) == 0) {
+    i2 = ii0[grep(paste("^", f, sep = ""), ii0$var), 
+    ]
+  }
+  is = c(is, sum(i2$importance))
+}
+ii2 = data.frame(cbind(importance = is, variable = colnames(X)))
+ii2$importance = as.numeric(ii2$importance)
+ii2$variable = factor(ii2$variable, levels = levs)
+ii2$rel=ii2$importance/sum(ii2$importance)
+ii2$R2=ii2$rel*0.26
+ii2$R2[ii2$variable=="ramet"]/ii2$R2[ii2$variable=="genet"]
+
+pdf(file="karina_rf_importance_R.pdf",height=1.8,width=2.2)
+ggplot(ii2,aes(variable,R2))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+  theme_bw()+
+  ylim(0,0.165)
+dev.off()
+
+#-----------
