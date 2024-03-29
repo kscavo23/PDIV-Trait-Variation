@@ -118,8 +118,8 @@ light.1wk <- all %>%
   filter(as.Date(all$Date) <= as.Date("2022-2-17"))
 
 #removing 0s because they mess up the rest of the analyses & they are at night
-light.1wk$Light[light.1wk$Light==0] <- NA
-light.day <- light.1wk[!is.na(light.1wk$Light),]
+light.1wk$ppfd[light.1wk$ppfd==0] <- NA
+light.day <- light.1wk[!is.na(light.1wk$ppfd),]
 
 light.1wk$Date = as.character(light.1wk$Date)
 
@@ -127,7 +127,7 @@ light.1wk$Date = as.character(light.1wk$Date)
 # not include light values = 0 (night values)
 
 # mixed - effect models
-m3 <- lmer(log(Light) ~ Site + (1|Date), data = light.1wk)
+m3 <- lmer(log(ppfd) ~ Site + (1|Date), data = light.1wk)
 summary(m3)
 confint(m3, method="Wald")
 
@@ -138,19 +138,19 @@ light.1wk2$Site = factor(light.1wk2$Site,levels=c("M1", "R_2","R_1", "M2"))
 light.1wk3= light.1wk
 light.1wk3$Site = factor(light.1wk3$Site,levels=c("R_1", "M1","M2", "R_2"))
 
-m3b <- lmer(log(Light) ~ Site + (1|Date), data = light.1wk2)
+m3b <- lmer(log(ppfd) ~ Site + (1|Date), data = light.1wk2)
 summary(m3b)
 
-m3c <- lmer(log(Light) ~ Site + (1|Date), data = light.1wk3)
+m3c <- lmer(log(ppfd) ~ Site + (1|Date), data = light.1wk3)
 summary(m3c)
 
 
 # light range
 
-range.light <- summaryBy(Light ~ Date*Site, data=light.day,
+range.light <- summaryBy(ppfd ~ Date*Site, data=light.day,
                          FUN=fun)
 
-range.light$lrange <- range.light$Light.r2 - range.light$Light.r1
+range.light$lrange <- range.light$ppfd.r2 - range.light$ppfd.r1
 
 range.light$Date = as.character(range.light$Date)
 
@@ -176,10 +176,10 @@ summary(m4c)
 # Plotting light data - mean and range
 
 # plot mean light for each site logger
-ggplot(range.light,aes(x=Site,y=log(Light.m),color=Site))+
+ggplot(range.light,aes(x=Site,y=log(ppfd.m),color=Site))+
   geom_boxplot(outlier.shape = NA, width=0.4, lwd=.6) +
   geom_point(size = 0.8, position = position_jitterdodge()) +
-  coord_cartesian(ylim = c(3, 9)) +
+  coord_cartesian(ylim = c(2, 7)) +
   scale_color_manual(values = c("limegreen", "darkgreen", "dodgerblue3", "deepskyblue2")) +
   theme_bw()
 
@@ -187,7 +187,7 @@ ggplot(range.light,aes(x=Site,y=log(Light.m),color=Site))+
 ggplot(range.light,aes(x=Site,y=log(lrange),color=Site))+
   geom_boxplot(outlier.shape = NA, width=0.4, lwd=.6) +
   geom_point(size = 0.6, position = position_jitterdodge()) +
-  coord_cartesian(ylim = c(3, 9)) +
+  coord_cartesian(ylim = c(2, 7)) +
   scale_color_manual(values = c("limegreen", "darkgreen", "dodgerblue3", "deepskyblue2")) +
   theme_bw()
 
